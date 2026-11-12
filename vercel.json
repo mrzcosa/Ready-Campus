@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "npm --prefix readycampus ci",
+  "buildCommand": "npm --prefix readycampus run build",
+  "outputDirectory": "readycampus/dist"
+}

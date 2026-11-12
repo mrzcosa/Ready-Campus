@@ -1,0 +1,5 @@
+.vercel
+node_modules/
+readycampus/node_modules/
+dist/
+readycampus/dist/
