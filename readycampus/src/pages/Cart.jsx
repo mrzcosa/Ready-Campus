@@ -1,0 +1,13 @@
+import { Link } from 'react-router-dom'
+import { ArrowLeft, Minus, Plus, Trash2 } from 'lucide-react'
+import { useStore } from '../context/StoreContext.jsx'
+import { CartSummary } from '../components/cart/CartSummary.jsx'
+import { ProductVisual } from '../components/products/ProductCard.jsx'
+import { money } from '../utils/format.js'
+
+export function Cart() {
+  const { cart, products, setCartQuantity, removeFromCart, clearCart, notify } = useStore()
+  const items = cart.map((entry) => { const product = products.find((item) => String(item.id) === String(entry.id)); return product ? { ...product, quantity: entry.quantity } : null }).filter(Boolean)
+  const emptyCart = () => { if (window.confirm('Clear every item from your cart?')) { clearCart(); notify('Your cart has been cleared.') } }
+  return <main className="content-page"><div className="page-intro compact-intro"><span className="eyebrow">Ready when you are</span><h1>Your Shopping Cart <span className="title-count">{items.reduce((sum, item) => sum + item.quantity, 0)}</span></h1></div>{items.length ? <div className="cart-layout"><section className="cart-items">{items.map((item) => <article className="cart-item" key={item.id}><Link className="cart-item-photo" to={`/products/${item.id}`}><ProductVisual product={item} /></Link><div className="cart-item-main"><span className="product-category">{item.category} · {item.brand}</span><h2><Link to={`/products/${item.id}`}>{item.name}</Link></h2><span className="cart-item-price">{money(item.price)} each</span><div className="cart-item-controls"><div className="quantity-control"><button aria-label={`Decrease ${item.name} quantity`} disabled={item.quantity <= 1} onClick={() => setCartQuantity(item.id, item.quantity - 1)}><Minus size={14} /></button><span>{item.quantity}</span><button aria-label={`Increase ${item.name} quantity`} disabled={item.quantity >= item.stock} onClick={() => setCartQuantity(item.id, item.quantity + 1)}><Plus size={14} /></button></div><button className="remove-item" onClick={() => removeFromCart(item.id)}><Trash2 size={15} /> Remove</button></div></div><strong className="cart-line-total">{money(item.price * item.quantity)}</strong></article>)}<div className="cart-footer-links"><Link className="back-link" to="/shop"><ArrowLeft size={15} /> Continue Shopping</Link><button className="text-danger" onClick={emptyCart}><Trash2 size={15} /> Clear Cart</button></div></section><CartSummary items={items} /></div> : <div className="empty-state"><span className="empty-state-icon">🛒</span><h2>Your cart is waiting for school supplies</h2><p>Explore stationery, classroom essentials, and more.</p><Link className="button button-orange" to="/shop">Continue Shopping</Link></div>}</main>
+}

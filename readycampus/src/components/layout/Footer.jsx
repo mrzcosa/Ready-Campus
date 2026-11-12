@@ -1,0 +1,7 @@
+import { Link } from 'react-router-dom'
+import { Camera, Mail, MapPin, Phone } from 'lucide-react'
+import brandWordmark from '../../assets/Logo/Equiped for class.png'
+
+export function Footer() {
+  return <footer className="footer"><div className="footer-main"><div className="footer-brand"><Link className="brand footer-logo footer-image-lockup" to="/" aria-label="ReadyCampus home"><img src={brandWordmark} alt="ReadyCampus — Equipped for Class" /></Link><p>Everything students and teachers need to make every school day a little brighter.</p><div className="social-links"><a href="https://www.facebook.com/" aria-label="Facebook">f</a><a href="https://www.instagram.com/" aria-label="Instagram"><Camera size={17} /></a></div></div><div><h3>Shop</h3><Link to="/shop">School Supplies</Link><Link to="/shop?collection=art-craft">Art & Craft</Link><Link to="/shop?category=Bags">Bags & Organizers</Link><Link to="/shop?sort=popular">Best Sellers</Link></div><div><h3>Customer Care</h3><Link to="/help">Help Center</Link><Link to="/track-order">Track Your Order</Link><Link to="/help">Returns & Exchanges</Link><Link to="/help">Shipping Information</Link><Link to="/contact">Contact Us</Link></div><div className="footer-contact"><h3>Get in touch</h3><p><MapPin size={16} /> Manila, Philippines</p><p><Phone size={16} /> (02) 8123 4567</p><p><Mail size={16} /> hello@readycampus.ph</p></div></div><div className="footer-bottom"><span>© 2026 ReadyCampus. All rights reserved.</span><span>Made for brighter school days <span className="heart">♥</span></span></div></footer>
+}
