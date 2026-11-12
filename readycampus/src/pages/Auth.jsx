@@ -1,6 +1,6 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Eye, EyeOff, GraduationCap } from 'lucide-react'
+import { Bell, CreditCard, Eye, EyeOff, GraduationCap, Heart, Inbox, MapPin, ShieldCheck, ShoppingBag, SlidersHorizontal, Ticket, UserRound } from 'lucide-react'
 import { useStore } from '../context/StoreContext.jsx'
 
 export function Auth({ mode = 'login' }) {
@@ -31,8 +31,83 @@ export function ForgotPassword() {
 }
 
 export function Account() {
-  const { user, signOut, orders, wishlist } = useStore()
-  if (!user) return <main className="content-page"><div className="empty-state"><h1>Sign in to view your account</h1><Link className="button button-orange" to="/login">Go to sign in</Link></div></main>
-  const myOrders = orders.filter((order) => order.customer.email.toLowerCase() === user.email.toLowerCase())
-  return <main className="content-page"><div className="page-intro"><span className="eyebrow">Demo account</span><h1>Hello, {user.firstName}</h1><p>{user.email} · Profile information is saved in this browser.</p></div><div className="account-actions-grid"><Link to="/wishlist"><h2>Wishlist</h2><p>{wishlist.length} saved school supplies</p></Link><Link to="/orders"><h2>My Orders</h2><p>{myOrders.length} demo orders</p></Link><button onClick={signOut}>Sign out</button></div></main>
+  const { user, signOut, orders, wishlist, notify } = useStore()
+  const displayName = user ? [user.firstName, user.lastName].filter(Boolean).join(' ') : 'Guest shopper'
+  const readSaved = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) || fallback } catch { return fallback } }
+  const [section, setSection] = useState('profile')
+  const [message, setMessage] = useState('')
+  const [form, setForm] = useState(() => {
+    const saved = readSaved('readycampus.profileDetails', {})
+    return { fullName: saved.fullName || displayName, username: saved.username || user?.email?.split('@')[0] || 'guest_shopper', gender: saved.gender || '', birthDate: saved.birthDate || '', photo: saved.photo || '' }
+  })
+  const [addresses, setAddresses] = useState(() => readSaved('readycampus.addresses', []))
+  const [addressForm, setAddressForm] = useState({ label: 'Home', recipient: displayName, phone: user?.phone || '', street: '', barangay: '', city: '', province: '', postalCode: '' })
+  const myOrders = user ? orders.filter((order) => order.customer?.email?.toLowerCase() === user.email.toLowerCase()) : []
+  const menu = [
+    { id: 'profile', label: 'My Profile', icon: UserRound, type: 'section' },
+    { id: 'banks', label: 'Banks & Cards', icon: CreditCard, type: 'disabled' },
+    { id: 'addresses', label: 'Addresses', icon: MapPin, type: 'section' },
+    { id: 'privacy', label: 'Privacy Settings', icon: ShieldCheck, type: 'disabled' },
+    { id: 'notifications-settings', label: 'Notification Settings', icon: Bell, type: 'disabled' },
+    { id: 'order-settings', label: 'Order Settings', icon: SlidersHorizontal, type: 'disabled' },
+    { id: 'purchases', label: 'My Purchases', icon: ShoppingBag, type: 'link', to: '/orders' },
+    { id: 'notifications', label: 'Notifications', icon: Inbox, type: 'disabled' },
+    { id: 'vouchers', label: 'My Vouchers', icon: Ticket, type: 'disabled' },
+    { id: 'wishlist', label: 'Wishlist / Saved Items', icon: Heart, type: 'link', to: '/wishlist' },
+  ]
+  const changeForm = (event) => setForm((value) => ({ ...value, [event.target.name]: event.target.value }))
+  const choosePhoto = (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) { setMessage('Choose a JPG, PNG, or WebP image up to 2 MB.'); return }
+    const reader = new FileReader()
+    reader.onload = () => { setForm((value) => ({ ...value, photo: String(reader.result) })); setMessage('Photo ready. Save your profile to keep it in this browser.') }
+    reader.onerror = () => setMessage('That photo could not be opened. Choose another file.')
+    reader.readAsDataURL(file)
+  }
+  const saveProfile = (event) => {
+    event.preventDefault()
+    try { localStorage.setItem('readycampus.profileDetails', JSON.stringify(form)); window.dispatchEvent(new Event('readycampus-profile-updated')); setMessage('Profile saved in this browser.'); notify('Profile saved.') }
+    catch { setMessage('Could not save. The photo may be too large for browser storage.') }
+  }
+  const saveAddress = (event) => {
+    event.preventDefault()
+    const updated = [...addresses, { ...addressForm, id: Date.now() }]
+    try { localStorage.setItem('readycampus.addresses', JSON.stringify(updated)); setAddresses(updated); setAddressForm({ label: 'Home', recipient: displayName, phone: user?.phone || '', street: '', barangay: '', city: '', province: '', postalCode: '' }); setMessage('Address saved in this browser.'); notify('Address saved.') }
+    catch { setMessage('Could not save this address in browser storage.') }
+  }
+  const removeAddress = (id) => {
+    const updated = addresses.filter((address) => address.id !== id)
+    localStorage.setItem('readycampus.addresses', JSON.stringify(updated)); setAddresses(updated); notify('Address removed.')
+  }
+  return <main className="content-page profile-page">
+    <div className="page-intro profile-intro"><span className="eyebrow">Account</span><h1>My Profile</h1><p>Manage your profile and account preferences.</p></div>
+    <div className="profile-settings-layout">
+      <aside className="profile-sidebar">
+        <div className="profile-sidebar-user"><div className="profile-avatar-small">{form.photo ? <img src={form.photo} alt="" /> : <UserRound size={25} />}</div><div><strong>{form.fullName || displayName}</strong><span>{user ? 'ReadyCampus demo account' : 'Guest session'}</span><button onClick={() => { setSection('profile'); setMessage('') }}>Edit Profile</button></div></div>
+        <nav aria-label="Profile sections">{menu.map(({ id, label, icon: Icon, type, to }) => type === 'link' ? <Link key={id} className="profile-menu-link" to={to}><Icon size={18} /><span>{label}</span><small>{id === 'wishlist' ? wishlist.length : myOrders.length}</small></Link> : <button key={id} className={`profile-menu-link ${section === id ? 'selected' : ''}`} disabled={type === 'disabled'} onClick={() => { setSection(id); setMessage('') }}><Icon size={18} /><span>{label}</span>{type === 'disabled' && <small>Setup needed</small>}</button>)}</nav>
+        {user && <button className="profile-signout" onClick={signOut}>Sign out</button>}
+      </aside>
+      <section className="profile-panel">
+        {section === 'profile' ? <>
+          <div className="profile-panel-heading"><span className="eyebrow">Account details</span><h2>My Profile</h2></div>
+          <form className="profile-form" onSubmit={saveProfile}>
+            <div className="profile-photo-field"><div className="profile-avatar-large">{form.photo ? <img src={form.photo} alt="Profile preview" /> : <UserRound size={35} />}</div><div><strong>Profile photo</strong><p>Choose a JPG, PNG, or WebP image up to 2 MB.</p><label className="profile-file-button">Choose photo<input type="file" accept="image/jpeg,image/png,image/webp" onChange={choosePhoto} /></label></div></div>
+            <label className="profile-field">Full name<input name="fullName" value={form.fullName} onChange={changeForm} required maxLength={80} /></label>
+            <label className="profile-field">Username<input name="username" value={form.username} onChange={changeForm} required maxLength={30} /></label>
+            {!user ? <p className="profile-guest-note">This profile belongs to your guest session. No email address is attached.</p> : <p className="profile-guest-note">Demo profile details are saved in this browser. Account security requires a connected identity service.</p>}
+            <fieldset className="profile-gender"><legend>Gender</legend>{[['male', 'Male'], ['female', 'Female'], ['unspecified', 'Prefer not to say']].map(([value, label]) => <label key={value}><input type="radio" name="gender" value={value} checked={form.gender === value} onChange={changeForm} />{label}</label>)}</fieldset>
+            <label className="profile-field profile-date-field">Date of birth<input type="date" name="birthDate" value={form.birthDate} onChange={changeForm} /></label>
+            {message && <p className="profile-message" role="status">{message}</p>}
+            <button className="button button-orange profile-save">Save Profile</button>
+          </form>
+        </> : <>
+          <div className="profile-panel-heading"><span className="eyebrow">Delivery details</span><h2>Addresses</h2><p>Saved addresses stay in this browser for the demo storefront.</p></div>
+          <div className="saved-addresses">{addresses.map((address) => <article key={address.id}><div><strong>{address.label} · {address.recipient}</strong><p>{address.street}, {address.barangay}, {address.city}, {address.province} {address.postalCode}</p><span>{address.phone}</span></div><button onClick={() => removeAddress(address.id)}>Remove</button></article>)}{!addresses.length && <p className="profile-empty-address">No saved addresses yet.</p>}</div>
+          <form className="profile-address-form" onSubmit={saveAddress}><h3>Add an address</h3><div className="profile-address-grid"><label>Address label<input required value={addressForm.label} onChange={(event) => setAddressForm({ ...addressForm, label: event.target.value })} /></label><label>Recipient full name<input required value={addressForm.recipient} onChange={(event) => setAddressForm({ ...addressForm, recipient: event.target.value })} /></label><label>Phone number<input required type="tel" value={addressForm.phone} onChange={(event) => setAddressForm({ ...addressForm, phone: event.target.value })} /></label><label className="address-wide">House / street<input required value={addressForm.street} onChange={(event) => setAddressForm({ ...addressForm, street: event.target.value })} /></label><label>Barangay<input required value={addressForm.barangay} onChange={(event) => setAddressForm({ ...addressForm, barangay: event.target.value })} /></label><label>City / Municipality<input required value={addressForm.city} onChange={(event) => setAddressForm({ ...addressForm, city: event.target.value })} /></label><label>Province<input required value={addressForm.province} onChange={(event) => setAddressForm({ ...addressForm, province: event.target.value })} /></label><label>Postal code<input required value={addressForm.postalCode} onChange={(event) => setAddressForm({ ...addressForm, postalCode: event.target.value })} /></label></div>{message && <p className="profile-message" role="status">{message}</p>}<button className="button button-orange">Save Address</button></form>
+        </>}
+      </section>
+    </div>
+  </main>
 }
+
