@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+﻿import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { products as seedProducts } from '../data/products.js'
 import { categories as seedCategories } from '../data/categories.js'
 import { FREE_SHIPPING_THRESHOLD, STANDARD_SHIPPING_FEE } from '../data/storeSettings.js'
@@ -37,6 +37,26 @@ export function StoreProvider({ children }) {
   useEffect(() => persist('readycampus.cart', cart), [cart])
   useEffect(() => persist('readycampus.wishlist', wishlist), [wishlist])
   useEffect(() => persist('readycampus.orders', orders), [orders])
+  useEffect(() => {
+    const advanceDemoOrders = () => {
+      const now = Date.now()
+      setOrders((current) => {
+        let changed = false
+        const updated = current.map((order) => {
+          if (order.demoAutoProgress === false || !['Pending', 'Ready for Shipment', 'Shipped'].includes(order.status)) return order
+          const statusTime = Date.parse(order.statusUpdatedAt || order.date)
+          const waitTime = order.status === 'Shipped' ? 60000 : 30000
+          if (!Number.isFinite(statusTime) || now - statusTime < waitTime) return order
+          changed = true
+          const nextStatus = order.status === 'Pending' ? 'Ready for Shipment' : order.status === 'Ready for Shipment' ? 'Shipped' : 'Out for Delivery'
+          return { ...order, status: nextStatus, statusUpdatedAt: new Date(now).toISOString() }
+        })
+        return changed ? updated : current
+      })
+    }
+    const timer = window.setInterval(advanceDemoOrders, 1000)
+    return () => window.clearInterval(timer)
+  }, [])
   useEffect(() => persist('readycampus.customers', customers), [customers])
   useEffect(() => {
     if (!user) { localStorage.removeItem('readycampus.user'); sessionStorage.removeItem('readycampus.session'); return }
@@ -79,31 +99,41 @@ export function StoreProvider({ children }) {
     return profile
   }, [notify])
   const signOut = useCallback(() => { setUser(null); notify('You have signed out.') }, [notify])
-  const createOrder = useCallback(async (details) => {
-    if (!cart.length) throw new Error('Your cart is empty.')
-    const items = cart.map((entry) => {
+  const createOrder = useCallback(async (details, itemIds = null) => {
+    const selectedCart = itemIds !== null ? cart.filter((entry) => itemIds.some((id) => String(id) === String(entry.id))) : cart
+    if (!selectedCart.length) throw new Error('Your cart is empty.')
+    const items = selectedCart.map((entry) => {
       const product = products.find((item) => String(item.id) === String(entry.id))
       if (!product || entry.quantity > product.stock) throw new Error(`Please check the available stock for ${product?.name || 'an item'}.`)
       return { ...product, quantity: entry.quantity }
     })
     const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0)
     const savings = items.reduce((sum, item) => sum + Math.max(0, item.oldPrice - item.price) * item.quantity, 0)
+    const createdAt = new Date().toISOString()
     const order = {
       reference: `RC-${new Date().toISOString().slice(2, 10).replaceAll('-', '')}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-      date: new Date().toISOString(), status: 'Pending', items, subtotal, savings,
+      date: createdAt, statusUpdatedAt: createdAt, status: 'Pending', items, subtotal, savings,
       shipping: subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE, total: subtotal + (subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING_FEE), ...details,
     }
     const result = await createOrderRequest(order)
-    const savedOrder = result.connected ? { ...order, ...result.order } : order
+    const providerPaymentStatus = String(result.order?.paymentStatus ?? result.order?.payment_status ?? result.order?.payment?.status ?? '').toLowerCase()
+    const paymentConfirmed = result.connected && (result.order?.paid === true || result.order?.paymentConfirmed === true || ['paid', 'succeeded', 'successful', 'completed'].includes(providerPaymentStatus))
+    const savedOrder = result.connected
+      ? { ...order, ...result.order, status: paymentConfirmed ? 'Ready for Shipment' : result.order?.status || order.status, statusUpdatedAt: paymentConfirmed ? new Date().toISOString() : result.order?.statusUpdatedAt || order.statusUpdatedAt, demoAutoProgress: false }
+      : { ...order, demoAutoProgress: true }
     setOrders((list) => [savedOrder, ...list])
     if (!result.connected) setProducts((list) => list.map((product) => {
       const ordered = items.find((item) => String(item.id) === String(product.id))
       return ordered ? { ...product, stock: Math.max(0, product.stock - ordered.quantity) } : product
     }))
-    setCart([])
+    const orderedIds = new Set(items.map((item) => String(item.id)))
+    setCart((current) => current.filter((entry) => !orderedIds.has(String(entry.id))))
     return savedOrder
   }, [cart, products])
-  const updateOrderStatus = useCallback((reference, status) => setOrders((list) => list.map((order) => order.reference === reference ? { ...order, status } : order)), [])
+  const updateOrderStatus = useCallback((reference, status) => setOrders((list) => list.map((order) => order.reference === reference ? { ...order, status, statusUpdatedAt: new Date().toISOString() } : order)), [])
+  const requestOrderRefund = useCallback((reference) => {
+    setOrders((list) => list.map((order) => order.reference === reference && order.status === 'Delivered' && !order.refundRequested ? { ...order, refundRequested: true, refundRequestedAt: new Date().toISOString() } : order))
+  }, [])
   const saveProduct = useCallback((product) => {
     setProducts((items) => product.id ? items.map((item) => item.id === product.id ? { ...item, ...product } : item) : [...items, { ...product, id: Date.now(), rating: Number(product.rating) || 5, reviews: 0, popularity: 0, createdAt: new Date().toISOString().slice(0, 10), tile: Number(product.tile) || 0, collections: [], description: product.description || 'A useful school supply for everyday classes.' }])
   }, [])
@@ -117,7 +147,7 @@ export function StoreProvider({ children }) {
   const deleteCategory = useCallback((category) => setCategories((items) => items.filter((item) => item.name !== category.name)), [])
 
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0)
-  const value = useMemo(() => ({ products, categories, cart, cartCount, wishlist, orders, customers, user, toast, notify, dismissToast: () => setToast(null), addToCart, setCartQuantity, removeFromCart, clearCart, toggleWishlist, signIn, signOut, createOrder, updateOrderStatus, saveProduct, deleteProduct, saveCategory, deleteCategory, setToast }), [products, categories, cart, cartCount, wishlist, orders, customers, user, toast, notify, addToCart, setCartQuantity, removeFromCart, clearCart, toggleWishlist, signIn, signOut, createOrder, updateOrderStatus, saveProduct, deleteProduct, saveCategory, deleteCategory])
+  const value = useMemo(() => ({ products, categories, cart, cartCount, wishlist, orders, customers, user, toast, notify, dismissToast: () => setToast(null), addToCart, setCartQuantity, removeFromCart, clearCart, toggleWishlist, signIn, signOut, createOrder, updateOrderStatus, requestOrderRefund, saveProduct, deleteProduct, saveCategory, deleteCategory, setToast }), [products, categories, cart, cartCount, wishlist, orders, customers, user, toast, notify, addToCart, setCartQuantity, removeFromCart, clearCart, toggleWishlist, signIn, signOut, createOrder, updateOrderStatus, requestOrderRefund, saveProduct, deleteProduct, saveCategory, deleteCategory])
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
 }
 
@@ -126,3 +156,13 @@ export function useStore() {
   if (!context) throw new Error('useStore must be used within StoreProvider')
   return context
 }
+
+
+
+
+
+
+
+
+
+

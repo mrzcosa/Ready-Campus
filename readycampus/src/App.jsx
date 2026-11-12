@@ -1,7 +1,6 @@
 import { BrowserRouter, Link, Route, Routes, useLocation } from 'react-router-dom'
 import { useLayoutEffect } from 'react'
 import { StoreProvider } from './context/StoreContext.jsx'
-import { AnnouncementBar } from './components/layout/AnnouncementBar.jsx'
 import { Header } from './components/layout/Header.jsx'
 import { Navbar } from './components/layout/Navbar.jsx'
 import { Footer } from './components/layout/Footer.jsx'
@@ -29,7 +28,7 @@ function StorefrontLayout() {
   const { pathname } = useLocation()
   const productPage = /^\/products\/[^/]+\/?$/.test(pathname)
   useLayoutEffect(() => { window.scrollTo(0, 0) }, [pathname])
-  return <div className={`app-root${productPage ? ' product-page-mode' : ''}`}>{!productPage && <><AnnouncementBar /><Header /><Navbar /></>}<Routes>
+  return <div className={`app-root${productPage ? ' product-page-mode' : ''}`}>{!productPage && <><Header /><Navbar /></>}<Routes>
     <Route path="/" element={<Home />} />
     <Route path="/shop" element={<Shop />} />
     <Route path="/deals" element={<Shop dealsOnly />} />
